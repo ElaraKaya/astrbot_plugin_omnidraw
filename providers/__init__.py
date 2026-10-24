@@ -5,6 +5,7 @@ from ..models import ProviderConfig
 from ..constants import APIType
 from .base import BaseProvider
 from .custom_endpoint_impl import CustomEndpointProvider
+from .custom_async_endpoint_impl import CustomAsyncEndpointProvider
 from .gemini_official_impl import GeminiOfficialProvider
 from .openai_impl import OpenAIProvider
 from .openai_chat_impl import OpenAIChatProvider
@@ -20,5 +21,7 @@ def create_provider(config: ProviderConfig, session: aiohttp.ClientSession) -> B
         return GeminiOfficialProvider(config, session)
     elif config.api_type == APIType.CUSTOM_ENDPOINT:
         return CustomEndpointProvider(config, session)
+    elif config.api_type == APIType.CUSTOM_ASYNC_ENDPOINT:
+        return CustomAsyncEndpointProvider(config, session)
     else:
         raise NotImplementedError(f"暂不支持该类型的接口: {config.api_type}")

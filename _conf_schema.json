@@ -175,9 +175,10 @@
               "openai_image",
               "openai_chat",
               "gemini_official",
-              "custom_endpoint"
+              "custom_endpoint",
+              "custom_async_endpoint"
             ],
-            "hint": "openai_image 适合标准图片接口；openai_chat 适合会返回图片链接的 chat/completions 中转站；gemini_official 使用 Google Gemini 官方 generateContent；custom_endpoint 为自定义完整路径，只请求你填写的完整 URL，不会追加 /v1、/images/generations 或 /chat/completions。",
+            "hint": "openai_image 适合标准图片接口；openai_chat 适合会返回图片链接的 chat/completions 中转站；gemini_official 使用 Google Gemini 官方 generateContent；custom_endpoint 为自定义同步完整路径；custom_async_endpoint 为自定义异步轮询完整路径（提交任务获取 task_id 并自动轮询结果）。",
             "default": "openai_image"
           },
           "base_url": {
