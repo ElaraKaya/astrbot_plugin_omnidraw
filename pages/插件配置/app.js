@@ -906,6 +906,29 @@ function renderProviderCard(p, i, isVideo) {
         </button>
     `).join("") || '<span class="empty-hint">暂无模型</span>';
 
+    const asyncFields = !isVideo && p.api_type === "custom_async_endpoint" ? `
+                <div class="form-group full-width">
+                    <label>轮询模板</label>
+                    <input type="text" class="input-glass" value="${escapeHtml(p.async_poll_template || "")}" placeholder="{origin}/v1/tasks/{task_id}" data-sync="prov-poll" data-index="${i}">
+                </div>
+                <div class="form-group">
+                    <label>成功状态</label>
+                    <input type="text" class="input-glass" value="${escapeHtml(p.async_success_status || "")}" placeholder="SUCCESS,SUCCEEDED,COMPLETED" data-sync="prov-success" data-index="${i}">
+                </div>
+                <div class="form-group">
+                    <label>取图路径</label>
+                    <input type="text" class="input-glass" value="${escapeHtml(p.async_image_path || "")}" placeholder="data.result.images.0.url.0" data-sync="prov-image-path" data-index="${i}">
+                </div>
+                <div class="form-group">
+                    <label>参考图上传</label>
+                    <input type="text" class="input-glass" value="${escapeHtml(p.async_upload_template || "")}" placeholder="{origin}/v1/uploads/images" data-sync="prov-upload" data-index="${i}">
+                </div>
+                <div class="form-group">
+                    <label>参考图字段</label>
+                    <input type="text" class="input-glass" value="${escapeHtml(p.async_image_field || "")}" placeholder="image_urls" data-sync="prov-image-field" data-index="${i}">
+                </div>
+    ` : "";
+
     return `
         <div class="node-card">
             <div class="node-card-header">
@@ -937,6 +960,7 @@ function renderProviderCard(p, i, isVideo) {
                     <label>默认尺寸</label>
                     <input type="text" class="input-glass" value="${escapeHtml(p.default_size || "")}" placeholder="${isVideo ? "1280x720" : "1024x1024"}" data-sync="${prefix}-size" data-index="${i}">
                 </div>
+                ${asyncFields}
                 <div class="form-group full-width">
                     <label>API Keys</label>
                     <textarea class="input-glass" rows="3" data-sync="${prefix}-keys" data-index="${i}">${escapeHtml(p.api_keys)}</textarea>
@@ -1372,6 +1396,11 @@ function setupEventDelegation() {
         if (s === "prov-time") state.providers[i].timeout = Math.min(3600, Math.max(1, parseFloat(v) || 60));
         if (s === "prov-size") state.providers[i].default_size = v.trim();
         if (s === "prov-keys") state.providers[i].api_keys = v;
+        if (s === "prov-poll") state.providers[i].async_poll_template = v.trim();
+        if (s === "prov-success") state.providers[i].async_success_status = v.trim();
+        if (s === "prov-image-path") state.providers[i].async_image_path = v.trim();
+        if (s === "prov-upload") state.providers[i].async_upload_template = v.trim();
+        if (s === "prov-image-field") state.providers[i].async_image_field = v.trim();
         if (s === "vid-id") state.video_providers[i].id = v;
         if (s === "vid-url") state.video_providers[i].base_url = v;
         if (s === "vid-time") state.video_providers[i].timeout = Math.min(3600, Math.max(1, parseFloat(v) || 300));
@@ -1536,6 +1565,11 @@ async function init() {
             available_models: availableModels,
             timeout: p.timeout || p["超时时间(秒)"] || 60,
             default_size: String(p.default_size || p.default_resolution || "").trim(),
+            async_poll_template: String(p.async_poll_template || "").trim(),
+            async_success_status: String(p.async_success_status || "").trim(),
+            async_image_path: String(p.async_image_path || "").trim(),
+            async_upload_template: String(p.async_upload_template || "").trim(),
+            async_image_field: String(p.async_image_field || "").trim(),
             api_keys: normalizeTextAreaKeys(p.api_keys || p["API密钥"] || "")
         };
     });

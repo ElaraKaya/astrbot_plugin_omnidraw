@@ -26,7 +26,7 @@ from .utils import save_image_bytes, split_data_url
 
 PLUGIN_NAME = "astrbot_plugin_omnidraw"
 PLUGIN_AUTHOR = "雪碧bir"
-PLUGIN_VERSION = "3.3.21"
+PLUGIN_VERSION = "3.3.24"
 DEFAULT_CACHE_CLEANUP_INTERVAL_HOURS = 24
 DEFAULT_MAX_CACHE_SIZE_MB = 512
 
@@ -41,6 +41,11 @@ class ProviderConfig:
     timeout: float
     default_size: str = ""
     available_models: List[str] = field(default_factory=list)
+    async_poll_template: str = ""
+    async_success_status: str = ""
+    async_image_path: str = ""
+    async_upload_template: str = ""
+    async_image_field: str = ""
 
     @property
     def has_api_key(self) -> bool:
@@ -431,6 +436,11 @@ def _build_provider_config(raw_provider: Any, is_video: bool) -> ProviderConfig:
         ),
         default_size=_normalize_optional_text(raw_provider.get("default_size", raw_provider.get("default_resolution", ""))),
         available_models=available_models,
+        async_poll_template=_normalize_optional_text(raw_provider.get("async_poll_template", "")),
+        async_success_status=_normalize_optional_text(raw_provider.get("async_success_status", "")),
+        async_image_path=_normalize_optional_text(raw_provider.get("async_image_path", "")),
+        async_upload_template=_normalize_optional_text(raw_provider.get("async_upload_template", "")),
+        async_image_field=_normalize_optional_text(raw_provider.get("async_image_field", "")),
     )
 
 
