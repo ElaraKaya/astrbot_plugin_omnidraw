@@ -220,7 +220,7 @@
           "async_poll_template": {
             "description": "异步轮询模板",
             "type": "string",
-            "hint": "仅 custom_async_endpoint 生效。留空时，内置主机用 {origin}/v1/tasks/{task_id}，其它地址把任务 ID 接在提交地址后。可填 {origin}/v1/tasks/{task_id}。占位符：{origin}、{endpoint}、{task_id}。",
+            "hint": "仅 custom_async_endpoint 生效。留空时把任务 ID 接在提交地址后面。如果任务查询地址不是这个，就必须填，例如 {origin}/v1/tasks/{task_id}。占位符：{origin}、{endpoint}、{task_id}。",
             "default": ""
           },
           "async_success_status": {
@@ -238,13 +238,13 @@
           "async_upload_template": {
             "description": "参考图上传模板",
             "type": "string",
-            "hint": "仅 custom_async_endpoint 生效。留空时，只有内置主机会先 POST {origin}/v1/uploads/images。填写后，本地图和 data URL 会上传到该地址，占位符同轮询模板。返回 JSON 需带顶层 url。",
+            "hint": "仅 custom_async_endpoint 生效。填写后，本地图和 data URL 会先上传到该地址，返回 JSON 需带顶层 url。占位符同轮询模板。留空表示不发参考图 URL，直接把图片 base64 提交。",
             "default": ""
           },
           "async_image_field": {
             "description": "参考图字段名",
             "type": "string",
-            "hint": "仅 custom_async_endpoint 生效。留空时，内置主机使用 image_urls，其它地址使用 image、image2、image3。填 image_urls、images、urls 或以 _urls 结尾时按数组提交。",
+            "hint": "仅 custom_async_endpoint 生效。留空时按 image、image2、image3 分别提交。填 image_urls、images、urls 或以 _urls 结尾时按数组提交。填了上传地址就必须填这个。",
             "default": ""
           }
         }

@@ -909,7 +909,7 @@ function renderProviderCard(p, i, isVideo) {
     const asyncFields = !isVideo && p.api_type === "custom_async_endpoint" ? `
                 <div class="form-group full-width">
                     <label>轮询模板</label>
-                    <input type="text" class="input-glass" value="${escapeHtml(p.async_poll_template || "")}" placeholder="{origin}/v1/tasks/{task_id}" data-sync="prov-poll" data-index="${i}">
+                    <input type="text" class="input-glass" value="${escapeHtml(p.async_poll_template || "")}" placeholder="留空=提交地址后接任务ID" data-sync="prov-poll" data-index="${i}">
                 </div>
                 <div class="form-group">
                     <label>成功状态</label>
@@ -921,11 +921,11 @@ function renderProviderCard(p, i, isVideo) {
                 </div>
                 <div class="form-group">
                     <label>参考图上传</label>
-                    <input type="text" class="input-glass" value="${escapeHtml(p.async_upload_template || "")}" placeholder="{origin}/v1/uploads/images" data-sync="prov-upload" data-index="${i}">
+                    <input type="text" class="input-glass" value="${escapeHtml(p.async_upload_template || "")}" placeholder="留空=直接提交base64" data-sync="prov-upload" data-index="${i}">
                 </div>
                 <div class="form-group">
                     <label>参考图字段</label>
-                    <input type="text" class="input-glass" value="${escapeHtml(p.async_image_field || "")}" placeholder="image_urls" data-sync="prov-image-field" data-index="${i}">
+                    <input type="text" class="input-glass" value="${escapeHtml(p.async_image_field || "")}" placeholder="留空=image,image2,image3" data-sync="prov-image-field" data-index="${i}">
                 </div>
     ` : "";
 

@@ -615,7 +615,8 @@ class GenerationMetadataConfigTest(unittest.TestCase):
             ),
             "https://cdn.example.com/a.png",
         )
-        self.assertEqual(provider._resolved_upload_url(provider_config.base_url), "https://img.example.com/upload")
+        self.assertEqual(provider._resolved_upload_url(), "https://img.example.com/upload")
+        self.assertEqual(provider._resolved_image_field(), "image_urls")
 
         schema = json.loads((PLUGIN_DIR / "_conf_schema.json").read_text(encoding="utf-8"))
         items = schema["providers"]["templates"]["image_provider"]["items"]
@@ -3406,23 +3407,26 @@ class CustomAsyncEndpointProviderTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(session.posts), 1)
         self.assertEqual(len(session.gets), 0)
 
-    async def test_apimart_polls_v1_tasks_and_uploads_reference_images(self):
-        endpoint = "https://api.apimart.ai/v1/images/generations"
+    async def test_configured_templates_route_tasks_and_uploads_reference_images(self):
+        endpoint = "https://api.example.com/v1/images/generations"
         config = ProviderConfig(
             id="async_node",
             api_type="custom_async_endpoint",
             base_url=endpoint,
             api_keys=["key-1"],
-            model="gpt-image-2.5-flare",
+            model="vendor-model",
             timeout=30.0,
+            async_poll_template="{origin}/v1/tasks/{task_id}",
+            async_upload_template="{origin}/v1/uploads/images",
+            async_image_field="image_urls",
         )
         png = b"\x89PNG\r\n\x1a\n" + b"image-bytes" * 4
         data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
         task_id = "task_01M56JM7ZV3PZEG3TCBA3555"
-        uploaded = "https://upload.apimart.ai/f/image/ref.png"
-        result_url = "https://upload.apimart.ai/f/image/example.png"
+        uploaded = "https://cdn.example.com/f/image/ref.png"
+        result_url = "https://cdn.example.com/f/image/example.png"
 
-        class ApiMartSession:
+        class ConfiguredSession:
             def __init__(self):
                 self.posts = []
                 self.gets = []
@@ -3438,14 +3442,7 @@ class CustomAsyncEndpointProviderTest(unittest.IsolatedAsyncioTestCase):
             def get(self, url, **kwargs):
                 self.gets.append({"url": url, **kwargs})
                 if len(self.gets) == 1:
-                    return FakePost(
-                        FakeResponse(
-                            {
-                                "code": 200,
-                                "data": {"id": task_id, "status": "processing", "progress": 10},
-                            }
-                        )
-                    )
+                    return FakePost(FakeResponse({"code": 200, "data": [{"status": "running"}]}))
                 return FakePost(
                     FakeResponse(
                         {
@@ -3460,20 +3457,93 @@ class CustomAsyncEndpointProviderTest(unittest.IsolatedAsyncioTestCase):
                     )
                 )
 
-        session = ApiMartSession()
+        session = ConfiguredSession()
         provider = CustomAsyncEndpointProvider(config, session)
         result = await provider.generate_image("keep the subject", user_refs=[data_url])
 
         self.assertEqual(result, result_url)
-        self.assertEqual(session.posts[0]["url"], "https://api.apimart.ai/v1/uploads/images")
+        self.assertEqual(session.posts[0]["url"], "https://api.example.com/v1/uploads/images")
         self.assertEqual(session.posts[0]["headers"], {"Authorization": "Bearer key-1"})
         self.assertEqual(session.posts[1]["url"], endpoint)
-        self.assertEqual(session.posts[1]["json"]["model"], "gpt-image-2.5-flare")
+        self.assertEqual(session.posts[1]["json"]["model"], "vendor-model")
         self.assertEqual(session.posts[1]["json"]["image_urls"], [uploaded])
         self.assertNotIn("image", session.posts[1]["json"])
-        poll_url = f"https://api.apimart.ai/v1/tasks/{task_id}"
+        poll_url = f"https://api.example.com/v1/tasks/{task_id}"
         self.assertEqual(session.gets[0]["url"], poll_url)
         self.assertEqual(session.gets[1]["url"], poll_url)
+
+    async def test_blank_config_falls_back_to_generic_task_and_base64_rules(self):
+        endpoint = "https://api.example.com/v1/images/generations"
+        config = ProviderConfig(
+            id="async_node",
+            api_type="custom_async_endpoint",
+            base_url=endpoint,
+            api_keys=["key-1"],
+            model="vendor-model",
+            timeout=30.0,
+        )
+        png = b"\x89PNG\r\n\x1a\n" + b"image-bytes" * 4
+        data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+        task_id = "job-42"
+        result_url = "https://cdn.example.com/out.png"
+
+        class GenericSession:
+            def __init__(self):
+                self.posts = []
+                self.gets = []
+
+            def post(self, url, **kwargs):
+                self.posts.append({"url": url, **kwargs})
+                return FakePost(FakeResponse({"task_id": task_id}))
+
+            def get(self, url, **kwargs):
+                self.gets.append({"url": url, **kwargs})
+                return FakePost(FakeResponse({"status": "SUCCESS", "url": result_url}))
+
+        session = GenericSession()
+        provider = CustomAsyncEndpointProvider(config, session)
+        result = await provider.generate_image("a cat", user_refs=[data_url])
+
+        self.assertEqual(result, result_url)
+        self.assertEqual(len(session.posts), 1)
+        self.assertEqual(session.posts[0]["url"], endpoint)
+        # 留空 = base64 直接提交，第一个字段 image，第二个 image2
+        self.assertEqual(session.posts[0]["json"]["image"], data_url)
+        self.assertNotIn("image_urls", session.posts[0]["json"])
+        # 留空 = 任务 ID 接在提交地址后
+        self.assertEqual(session.gets[0]["url"], f"{endpoint}/{task_id}")
+
+    async def test_upload_template_without_image_field_is_rejected(self):
+        endpoint = "https://api.example.com/v1/images/generations"
+        config = ProviderConfig(
+            id="async_node",
+            api_type="custom_async_endpoint",
+            base_url=endpoint,
+            api_keys=["key-1"],
+            model="vendor-model",
+            timeout=30.0,
+            async_upload_template="{origin}/v1/uploads/images",
+        )
+        png = b"\x89PNG\r\n\x1a\n" + b"image-bytes" * 4
+        data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+
+        class NoopSession:
+            def __init__(self):
+                self.posts = []
+                self.gets = []
+
+            def post(self, url, **kwargs):
+                self.posts.append({"url": url, **kwargs})
+                return FakePost(FakeResponse({"url": "https://cdn.example.com/ref.png"}))
+
+            def get(self, url, **kwargs):
+                self.gets.append({"url": url, **kwargs})
+                return FakePost(FakeResponse({"status": "SUCCESS"}))
+
+        provider = CustomAsyncEndpointProvider(config, NoopSession())
+        with self.assertRaises(ValueError) as ctx:
+            await provider.generate_image("a cat", user_refs=[data_url])
+        self.assertIn("async_image_field", str(ctx.exception))
 
     async def test_configured_templates_replace_hardcoded_vendor_flow(self):
         endpoint = "https://img.example.com/v1/images/generations"

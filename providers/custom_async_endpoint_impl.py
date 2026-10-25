@@ -6,7 +6,7 @@ import json
 import math
 import re
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import quote, urlparse
 
 import aiohttp
 from astrbot.api import logger
@@ -61,11 +61,6 @@ def extract_task_id_from_response(payload: Any) -> Optional[str]:
                 return sub_id
 
     return None
-
-
-def _is_apimart_host(endpoint: str) -> bool:
-    host = (urlparse(endpoint).hostname or "").lower().rstrip(".")
-    return host == "apimart.ai" or host.endswith(".apimart.ai")
 
 
 def _origin_of(endpoint: str) -> str:
@@ -161,21 +156,15 @@ class CustomAsyncEndpointProvider(BaseProvider):
     def _configured_text(self, name: str) -> str:
         return str(getattr(self.config, name, "") or "").strip()
 
-    def _resolved_upload_url(self, endpoint: str) -> str:
+    def _resolved_upload_url(self) -> str:
+        """Reference upload URL, only when the node provides a template."""
         template = self._configured_text("async_upload_template")
         if template:
-            return _render_async_template(template, endpoint)
-        if _is_apimart_host(endpoint):
-            return f"{_origin_of(endpoint)}/v1/uploads/images"
+            return _render_async_template(template, self._endpoint())
         return ""
 
-    def _resolved_image_field(self, endpoint: str) -> str:
-        field = self._configured_text("async_image_field")
-        if field:
-            return field
-        if _is_apimart_host(endpoint):
-            return "image_urls"
-        return ""
+    def _resolved_image_field(self) -> str:
+        return self._configured_text("async_image_field")
 
     def _success_statuses(self) -> set:
         raw = self._configured_text("async_success_status")
@@ -190,15 +179,15 @@ class CustomAsyncEndpointProvider(BaseProvider):
         return extract_image_url_from_response(data, base_url)
 
     def _build_poll_url(self, endpoint: str, task_id: str) -> str:
-        """Derive status/poll endpoint URL from submission URL and task_id."""
+        """Derive status/poll endpoint URL from submission URL and task_id.
+
+        Without a template the task id is appended to the submit path. A vendor
+        that serves tasks from another path must set async_poll_template.
+        """
         safe_task_id = quote(str(task_id).strip(), safe="")
         template = self._configured_text("async_poll_template")
         if template:
             return _render_async_template(template, endpoint, safe_task_id)
-        if _is_apimart_host(endpoint):
-            # Built-in host queries GET /v1/tasks/{task_id}.
-            # Appending the id onto the submit path returns HTTP 404.
-            return f"{_origin_of(endpoint)}/v1/tasks/{safe_task_id}"
         return f"{endpoint.rstrip('/')}/{safe_task_id}"
 
     def _build_payload(self, prompt: str, encoded_images: List[str], api_kwargs: Dict[str, Any]) -> Dict[str, Any]:
@@ -209,9 +198,6 @@ class CustomAsyncEndpointProvider(BaseProvider):
             payload["image" if index == 0 else f"image{index + 1}"] = image_url
         payload.update(api_kwargs)
         return payload
-
-    def _build_apimart_payload(self, prompt: str, image_urls: List[str], api_kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        return self._build_reference_payload(prompt, image_urls, api_kwargs, "image_urls", as_list=True)
 
     def _build_reference_payload(
         self,
@@ -234,7 +220,7 @@ class CustomAsyncEndpointProvider(BaseProvider):
         payload.update(api_kwargs)
         return payload
 
-    async def _upload_apimart_image(
+    async def _upload_reference_image(
         self,
         upload_url: str,
         authorization: str,
@@ -279,7 +265,7 @@ class CustomAsyncEndpointProvider(BaseProvider):
                 raise RuntimeError("参考图上传响应缺少 url")
             return image_url.strip()
 
-    async def _apimart_image_urls(self, upload_url: str, authorization: str, ref_images: List[str]) -> List[str]:
+    async def _reference_image_urls(self, upload_url: str, authorization: str, ref_images: List[str]) -> List[str]:
         image_urls: List[str] = []
         for index, ref in enumerate(ref_images, start=1):
             parsed = urlparse(str(ref).strip())
@@ -289,7 +275,7 @@ class CustomAsyncEndpointProvider(BaseProvider):
             loaded = await self.load_reference_images([ref], max_images=1)
             image_bytes, mime_type = loaded[0]
             image_urls.append(
-                await self._upload_apimart_image(upload_url, authorization, image_bytes, mime_type, index)
+                await self._upload_reference_image(upload_url, authorization, image_bytes, mime_type, index)
             )
         return image_urls
 
@@ -391,8 +377,8 @@ class CustomAsyncEndpointProvider(BaseProvider):
 
         endpoint = self._endpoint()
         ref_images = self.get_reference_images(**kwargs)
-        image_field = self._resolved_image_field(endpoint)
-        upload_url = self._resolved_upload_url(endpoint)
+        image_field = self._resolved_image_field()
+        upload_url = self._resolved_upload_url()
         list_mode = _is_list_image_field(image_field) if image_field else False
         max_refs = 16 if list_mode else 3
         if ref_images and len(ref_images) > max_refs:
@@ -406,8 +392,12 @@ class CustomAsyncEndpointProvider(BaseProvider):
 
         logger.info(f"📝 [异步轮询通道] 提交提示词:\n{prompt}")
         if upload_url:
-            image_urls = await self._apimart_image_urls(upload_url, headers["Authorization"], ref_images)
-            field = image_field or "image_urls"
+            if not image_field:
+                raise ValueError(
+                    "已配置参考图上传地址，但未配置参考图字段名，无法提交参考图。请填写 async_image_field。"
+                )
+            image_urls = await self._reference_image_urls(upload_url, headers["Authorization"], ref_images)
+            field = image_field
             payload = self._build_reference_payload(
                 prompt,
                 image_urls,
